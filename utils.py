@@ -15,6 +15,9 @@ class Replies(Enum):
     EDIT = "Заполнить профиль заново ✍️"
     VIEW = "Смотреть анкеты 🚀"
 
+    CONTINUE = "Продолжить 🚀"
+    CONTINUE_WATCHING = "Смотреть 🚀"
+
     LIKE = "❤️"
     DISLIKE = "👎"
 
@@ -32,6 +35,18 @@ class Replies(Enum):
 7. Опыт игры в группе
 8. Кого ищёшь для реализации творческого начала?"""
     LINK = "Пришли ссылку на яндекс диск с твоими  материалами (демки, записи игры на инструменте и т.д.)"
+
+    CONTINUE_MARKUP = ReplyKeyboardMarkup(
+        [[CONTINUE]],
+        resize_keyboard=True,
+        one_time_keyboard=True,
+    )
+
+    CONTINUE_WATCHING_MARKUP = ReplyKeyboardMarkup(
+        [[CONTINUE_WATCHING]],
+        resize_keyboard=True,
+        one_time_keyboard=True,
+    )
 
     MAIN_MARKUP = ReplyKeyboardMarkup(
         [
