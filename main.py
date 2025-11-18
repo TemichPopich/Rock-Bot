@@ -34,7 +34,21 @@ logging.basicConfig(
 load_dotenv()
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 
-MAIN, NAME, FACULTY, COURSE, EDUCATION, DESC, LINK, LIKE = range(8)
+(
+    MAIN,
+    NAME,
+    FACULTY,
+    COURSE,
+    EDUCATION,
+    EX,
+    MUSIC,
+    FAVS,
+    OPINION,
+    GROUP,
+    FIND,
+    LINK,
+    LIKE,
+) = range(13)
 
 
 async def get_profile(id: int):
@@ -159,12 +173,42 @@ async def edu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     context.user_data[EDUCATION] = education[query.data]
-    await query.edit_message_text(replies.DESC.value)
-    return DESC
+    await query.edit_message_text(replies.EX.value)
+    return EX
 
 
-async def desc(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data[DESC] = update.message.text
+async def ex(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data[EX] = update.message.text
+    await update.message.reply_text(replies.MUSIC.value)
+    return MUSIC
+
+
+async def music(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data[MUSIC] = update.message.text
+    await update.message.reply_text(replies.FAVS.value)
+    return FAVS
+
+
+async def favs(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data[FAVS] = update.message.text
+    await update.message.reply_text(replies.OPINION.value)
+    return OPINION
+
+
+async def opinion(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data[OPINION] = update.message.text
+    await update.message.reply_text(replies.GROUP.value)
+    return GROUP
+
+
+async def group(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data[GROUP] = update.message.text
+    await update.message.reply_text(replies.FIND.value)
+    return FIND
+
+
+async def find(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data[FIND] = update.message.text
     await update.message.reply_text(replies.LINK.value)
     return LINK
 
@@ -175,6 +219,15 @@ async def link(update: Update, context: ContextTypes.DEFAULT_TYPE):
     async with async_session_maker() as session:
         profile: Profile | None = await session.get(Profile, update.effective_chat.id)
 
+        desk = f"""
+{context.user_data[EX]}
+{context.user_data[MUSIC]}
+{context.user_data[FAVS]}
+{context.user_data[OPINION]}
+{context.user_data[GROUP]}
+{context.user_data[FIND]}
+"""
+
         if profile is None:
             profile = Profile(
                 id=update.effective_chat.id,
@@ -183,7 +236,7 @@ async def link(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 faculty=context.user_data[FACULTY],
                 course=context.user_data[COURSE],
                 education=context.user_data[EDUCATION],
-                desc=context.user_data[DESC],
+                desc=desk,
                 link=context.user_data[LINK],
             )
             session.add(profile)
@@ -192,7 +245,7 @@ async def link(update: Update, context: ContextTypes.DEFAULT_TYPE):
             profile.faculty = context.user_data[FACULTY]
             profile.course = context.user_data[COURSE]
             profile.education = context.user_data[EDUCATION]
-            profile.desc = context.user_data[DESC]
+            profile.desc = desk
             profile.link = context.user_data[LINK]
 
         await session.commit()
@@ -303,11 +356,16 @@ def run_bot():
             FACULTY: [MessageHandler(filters.TEXT & ~filters.COMMAND, faculty)],
             COURSE: [MessageHandler(filters.TEXT & ~filters.COMMAND, course)],
             EDUCATION: [CallbackQueryHandler(edu)],
-            DESC: [MessageHandler(filters.TEXT & ~filters.COMMAND, desc)],
+            EX: [MessageHandler(filters.TEXT & ~filters.COMMAND, ex)],
+            MUSIC: [MessageHandler(filters.TEXT & ~filters.COMMAND, music)],
+            FAVS: [MessageHandler(filters.TEXT & ~filters.COMMAND, favs)],
+            OPINION: [MessageHandler(filters.TEXT & ~filters.COMMAND, opinion)],
+            GROUP: [MessageHandler(filters.TEXT & ~filters.COMMAND, group)],
+            FIND: [MessageHandler(filters.TEXT & ~filters.COMMAND, find)],
             LINK: [MessageHandler(filters.TEXT & ~filters.COMMAND, link)],
             LIKE: [MessageHandler(filters.TEXT & ~filters.COMMAND, like)],
         },
-        fallbacks=[CommandHandler("restart", restart)],
+        fallbacks=[CommandHandler("start", restart)],
     )
 
     app.add_handler(conv_handler)
