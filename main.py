@@ -107,6 +107,9 @@ async def main(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return NAME
         case replies.VIEW.value:
             return await view_musician(update=update, context=context)
+        case replies.INFO.value:
+            await update.message.reply_text(replies.MAN.value, parse_mode="HTML")
+            return MAIN
 
     return await default(update=update, context=context)
 
