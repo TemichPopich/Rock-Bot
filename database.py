@@ -70,6 +70,6 @@ class Profile(Base):
     def __repr__(self) -> str:
         return (
             f"{self.name}\nфакультет - '{self.faculty}', "
-            f"курс - {self.course}, музыкальное образование - {self.education.name}"
-            f"\n{self.desc}\n<ссылка:{self.link})>"
+            f"курс - {self.course}, музыкальное образование - {self.education.value}"
+            f"\n{self.desc}\n<ссылка:{self.link}>"
         )
