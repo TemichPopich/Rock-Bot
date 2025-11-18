@@ -8,6 +8,7 @@ from sqlalchemy.orm import selectinload
 from telegram import (
     InlineKeyboardButton,
     InlineKeyboardMarkup,
+    ReplyKeyboardRemove,
     Update,
 )
 from telegram.ext import (
@@ -280,6 +281,17 @@ async def default(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return LIKE
 
 
+async def restart(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data.clear()
+
+    await update.message.reply_text(
+        "🔄 Сессия сброшена! Начинаем заново.\n" "Отправь /start чтобы начать сначала.",
+        reply_markup=ReplyKeyboardRemove(),
+    )
+
+    return ConversationHandler.END
+
+
 def run_bot():
     app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
@@ -295,7 +307,7 @@ def run_bot():
             LINK: [MessageHandler(filters.TEXT & ~filters.COMMAND, link)],
             LIKE: [MessageHandler(filters.TEXT & ~filters.COMMAND, like)],
         },
-        fallbacks=[],
+        fallbacks=[CommandHandler("restart", restart)],
     )
 
     app.add_handler(conv_handler)
