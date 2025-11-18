@@ -1,10 +1,9 @@
-import asyncio
 import os
 import logging
 
 
 from dotenv import load_dotenv
-from sqlalchemy import exists, func, select
+from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 from telegram import (
     InlineKeyboardButton,
@@ -37,9 +36,6 @@ TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 MAIN, NAME, FACULTY, COURSE, EDUCATION, DESC, LINK, LIKE = range(8)
 
 
-profiles_cache: list[Profile] = []
-
-
 async def get_profile(id: int):
     async with async_session_maker() as session:
         return (
@@ -65,35 +61,54 @@ async def check_enity_exists(id: int):
         return await session.get(Profile, id) is not None
 
 
-async def main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def view_profile(update: Update):
+    user_profile = await get_profile(update.effective_chat.id)
+    await update.message.reply_text(
+        str(user_profile), reply_markup=replies.MAIN_MARKUP.value
+    )
+    return MAIN
+
+
+async def view_musician(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    async with async_session_maker() as session:
+        user_profile: Profile = await session.get(
+            Profile,
+            update.effective_chat.id,
+            options=[
+                selectinload(Profile.likes),
+            ],
+        )
+        count: Profile = await session.scalar(func.count(Profile.id))
+    musician = await get_random_profile(exclude_id=update.effective_chat.id)
+    if musician is None or len(user_profile.likes) == count - 1:
+        await update.message.reply_text(
+            "Профилей пока нет", reply_markup=replies.MAIN_MARKUP.value
+        )
+        return MAIN
+    if musician in user_profile.likes:
+        return await view_musician(exclude_id=update.effective_chat.id)
+
+    context.user_data["profile_id"] = musician.id
+    await update.message.reply_text(
+        str(musician), reply_markup=replies.LIKE_MARKUP.value
+    )
+
+    return LIKE
+
+
+async def main(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.message
 
     match message.text:
         case replies.PROFILE.value:
-            user_profile = await get_profile(update.effective_chat.id)
-            await update.message.reply_text(str(user_profile))
-            await update.message.reply_text(
-                "Выбери действие:", reply_markup=replies.MAIN_MARKUP.value
-            )
-            return MAIN
+            return await view_profile(update=update)
         case replies.EDIT.value:
             await update.message.reply_text("Введи имя:")
             return NAME
         case replies.VIEW.value:
-            profile = await get_random_profile(exclude_id=update.effective_chat.id)
-            if profile is None:
-                await update.message.reply_text("Профилей пока нет")
-                await update.message.reply_text(
-                    "Выбери действие:", reply_markup=replies.MAIN_MARKUP.value
-                )
-                return MAIN
+            return await view_musician(update=update, context=context)
 
-            context.user_data["profile_id"] = profile.id
-            await update.message.reply_text(str(profile))
-            await update.message.reply_text(
-                "Выбери действие:", reply_markup=replies.LIKE_MARKUP.value
-            )
-            return LIKE
+    return await default(update=update, context=context)
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -181,53 +196,85 @@ async def link(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     context.user_data["user_profile"] = profile
     await update.message.reply_text("Профиль сохранен")
-    await update.message.reply_text(str(profile))
     await update.message.reply_text(
-        "Выбери действие:", reply_markup=replies.MAIN_MARKUP.value
+        str(profile), reply_markup=replies.MAIN_MARKUP.value
     )
     return MAIN
 
 
 async def like(update: Update, context: ContextTypes.DEFAULT_TYPE):
     async with async_session_maker() as session:
-        if update.message.text == replies.LIKE.value:
-            user_profile: Profile = await session.get(
-                Profile, update.effective_chat.id, options=[selectinload(Profile.likes)]
-            )
-            liked_profile: Profile = await session.get(
-                Profile,
-                context.user_data["profile_id"],
-                options=[selectinload(Profile.likes)],
-            )
-
-            liked_by = f"Твой профиль понравился\n{str(user_profile)}"
-            greeting = "Начинай общаться 👉"
-
-            if user_profile in liked_profile.likes:
-                liked_profile.likes.remove(user_profile)
-                await session.commit()
-                await context.bot.send_message(
-                    chat_id=liked_profile.id,
-                    text=f"{liked_by}\n{greeting}{user_profile.username}",
-                    reply_markup=replies.LIKE_MARKUP.value,
+        match update.message.text:
+            case replies.LIKE.value:
+                user_profile: Profile = await session.get(
+                    Profile,
+                    update.effective_chat.id,
+                    options=[
+                        selectinload(Profile.likes),
+                        selectinload(Profile.liked_by),
+                    ],
                 )
-                await update.message.reply_text(f"{greeting}{liked_profile.username}")
-            else:
-                user_profile.likes.append(liked_profile)
-                await session.commit()
-                await context.bot.send_message(
-                    chat_id=liked_profile.id,
-                    text=liked_by,
-                    reply_markup=replies.LIKE_MARKUP.value,
+                liked_profile: Profile = await session.get(
+                    Profile,
+                    context.user_data["profile_id"],
+                    options=[
+                        selectinload(Profile.likes),
+                        selectinload(Profile.liked_by),
+                    ],
                 )
 
-    profile: Profile = await get_random_profile(id=update.effective_chat.id)
-    context.user_data["profile_id"] = profile.id
-    await update.message.reply_text(str(profile))
-    await update.message.reply_text(
-        "Выбери действие:", reply_markup=replies.LIKE_MARKUP.value
-    )
-    return LIKE
+                liked_by = f"Твой профиль понравился\n{str(user_profile)}"
+                greeting = "Начинай общаться 👉"
+
+                if liked_profile in user_profile.liked_by:
+                    user_profile.likes.append(liked_profile)
+                    await session.commit()
+                    await context.bot.send_message(
+                        chat_id=liked_profile.id,
+                        text=f"{liked_by}\n{greeting}{user_profile.username}",
+                        reply_markup=replies.CONTINUE_MARKUP.value,
+                    )
+                    await update.message.reply_text(
+                        f"{greeting}{liked_profile.username}"
+                    )
+                elif liked_profile not in user_profile.likes:
+                    user_profile.likes.append(liked_profile)
+                    await session.commit()
+                    await context.bot.send_message(
+                        chat_id=liked_profile.id,
+                        text=liked_by,
+                        reply_markup=replies.CONTINUE_WATCHING_MARKUP.value,
+                    )
+
+                return await view_musician(update=update, context=context)
+
+            case replies.DISLIKE.value:
+                return await view_musician(update=update, context=context)
+
+            case replies.PROFILE.value:
+                return await view_profile(update=update)
+
+    return await default(update=update, context=context)
+
+
+async def default(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    match update.message.text:
+        case replies.CONTINUE.value:
+            return await view_musician(update=update, context=context)
+        case replies.CONTINUE_WATCHING.value:
+            async with async_session_maker() as session:
+                user_profile: Profile = await session.get(
+                    Profile,
+                    update.effective_chat.id,
+                    options=[selectinload(Profile.liked_by)],
+                )
+                profile = user_profile.liked_by[0]
+                context.user_data["profile_id"] = profile.id
+                await update.message.reply_text(
+                    str(profile), reply_markup=replies.LIKE_MARKUP.value
+                )
+
+                return LIKE
 
 
 def run_bot():
@@ -236,18 +283,20 @@ def run_bot():
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler("start", start)],
         states={
-            MAIN: [MessageHandler(filters.TEXT & ~filters.COMMAND, main_menu)],
+            MAIN: [MessageHandler(filters.TEXT & ~filters.COMMAND, main)],
             NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, name)],
             FACULTY: [MessageHandler(filters.TEXT & ~filters.COMMAND, faculty)],
             COURSE: [MessageHandler(filters.TEXT & ~filters.COMMAND, course)],
             EDUCATION: [CallbackQueryHandler(edu)],
             DESC: [MessageHandler(filters.TEXT & ~filters.COMMAND, desc)],
             LINK: [MessageHandler(filters.TEXT & ~filters.COMMAND, link)],
+            LIKE: [MessageHandler(filters.TEXT & ~filters.COMMAND, like)],
         },
         fallbacks=[],
     )
 
     app.add_handler(conv_handler)
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, default))
 
     app.run_polling()
 
