@@ -5,10 +5,34 @@ services:
     restart: unless-stopped 
     env_file:
       - ./.env
+    environment:
+      POSTGRES_USER: $POSTGRES_USER
+      POSTGRES_PASSWORD: $POSTGRES_PASSWORD
+      POSTGRES_DB: $POSTGRES_DB
     ports: 
-      - "5433:5432"
+      - 5533:$POSTGRES_PORT
     volumes:
       - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "sh -c 'pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}'"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  bot:
+    build: .
+    container_name: rock_bot
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - ./.env
+    command: >
+      sh -c "alembic upgrade head && python main.py"
+    volumes:
+      - ./bot.log:/app/bot.log
+      - ./logs:/app/logs
+    restart: unless-stopped
 
 volumes:
   db-data:
